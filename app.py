@@ -299,6 +299,16 @@ def add_cache_control(response):
     response.headers['Expires'] = '0'
     return response
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    print("[ERROR]", traceback.format_exc())
+    return jsonify({'error': str(e)}), 500
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': str(e)}), 404
+
 
 # ── In-memory cache (refreshed on /api/refresh) ───────────────────────────
 _cache = {}
@@ -416,6 +426,8 @@ def api_test_connection():
 
 @app.route('/api/status')
 def api_status():
+    if 'df' not in _cache:
+        load_data()
     if _cache.get('error'):
         return jsonify({'ok': False, 'error': _cache['error']}), 503
     return jsonify({'ok': True, 'refreshed': _cache.get('refreshed')})
@@ -710,7 +722,7 @@ def api_location_detail(location_name):
 # ══════════════════════════════════════════════════════════════════════════════
 FOCUS_PRODUCTS = [
     'AMORA', 'ARM BAND', 'CATHY HANDBAG', 'CELINE SLING BAG', 'CESS', 'CHASE',
-    'CLAIRE HB', 'COSMO', 'IMANI', 'LEGACY', 'LOOP BP', 'MANDY HB', 'MEGA',
+    'CLAIRE HANDBAG', 'COSMO', 'IMANI', 'LEGACY', 'LOOP BP', 'MANDY HB', 'MEGA',
     'MINI UMBRA', 'MONAH BP', 'MONTANA', 'NALA', 'PIONEER', 'PRIME',
     'SIERRA HANDBAG', 'SKYE HB', 'SPARK', 'SPLASH BACKPACK', 'TAJI', 'VOYAGE',
 ]
