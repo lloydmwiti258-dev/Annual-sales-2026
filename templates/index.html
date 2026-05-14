@@ -554,7 +554,7 @@ async function loadAll(){
     const status=await fetch('/api/status');
     if(!status.ok){
       const s=await status.json();
-      showError(s.error||'SpreadsheetNotFound'); return;
+      showError(s.error||'SpreadsheetNotFound', 'connection'); return;
     }
     currentMonth = $('monthFilter').value;
     currentRegion = $('regionFilter').value;
@@ -600,11 +600,16 @@ async function loadAll(){
         sFilter.appendChild(opt);
       });
     }
+    // Check any data endpoint returned an error
+    const firstErr = [META,SUMMARY,LOC_DATA,REG_DATA,COLOR_DATA,CAT_DATA,BAG_DATA,COLOR_REG,PROD_DATA,FOCUS_DATA]
+      .find(d => d && d.error);
+    if(firstErr){ showError(firstErr.error, 'data'); return; }
+
     // Remove any old error banner
     const b=document.getElementById('errBanner');
     if(b) b.remove();
     renderAll();
-  }catch(e){showError(e.message);}
+  }catch(e){showError(e.message, 'unknown');}
   $('loader').style.display='none';
 }
 
@@ -971,8 +976,8 @@ function renderAll(){
   renderFocus();
 }
 
-// ── Connection error banner ────────────────────────────────────────────────
-function showError(msg){
+// ── Error banner ───────────────────────────────────────────────────────────
+function showError(msg, type='connection'){
   $('loader').style.display='none';
   let b=document.getElementById('errBanner');
   if(!b){
@@ -981,12 +986,21 @@ function showError(msg){
     b.style.cssText='background:#1a0a0a;border:1px solid #e74c3c;border-radius:10px;padding:20px 28px;margin:24px 32px;color:#e74c3c;font-size:.9rem;line-height:1.8';
     document.querySelector('main').prepend(b);
   }
-  b.innerHTML=`<strong style="font-size:1rem">Sheet Not Connected</strong><br>
-  The service account cannot access <strong>ANNUAL SALES 2026</strong>.<br><br>
-  <strong>Fix:</strong> Open the sheet in Google Sheets &rarr; click <strong>Share</strong> &rarr; add:<br>
-  <code style="background:#2a0a0a;padding:4px 10px;border-radius:5px;font-size:.85rem">retention@retention-485013.iam.gserviceaccount.com</code>
-  as <strong>Editor</strong>, then click the <strong>&#8635; Refresh</strong> button above.<br><br>
-  <small style="color:#8b949e">Error: ${msg}</small>`;
+  if(type==='connection'){
+    b.innerHTML=`<strong style="font-size:1rem">Sheet Not Connected</strong><br>
+    The service account cannot access <strong>ANNUAL SALES 2026</strong>.<br><br>
+    <strong>Fix:</strong> Open the sheet in Google Sheets &rarr; click <strong>Share</strong> &rarr; add:<br>
+    <code style="background:#2a0a0a;padding:4px 10px;border-radius:5px;font-size:.85rem">retention@retention-485013.iam.gserviceaccount.com</code>
+    as <strong>Editor</strong>, then click <strong>Retry</strong> below.<br><br>
+    <details style="margin-top:8px"><summary style="cursor:pointer;color:#8b949e;font-size:.85rem">Error details</summary>
+    <pre style="white-space:pre-wrap;font-size:.8rem;color:#c0392b;margin-top:6px">${msg}</pre></details>
+    <br><button onclick="refreshData()" style="background:#e74c3c;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:.9rem">&#8635; Retry Connection</button>`;
+  } else {
+    b.innerHTML=`<strong style="font-size:1rem">Dashboard Error</strong><br>
+    The sheet is connected but something went wrong loading the data.<br><br>
+    <pre style="white-space:pre-wrap;font-size:.85rem;color:#c0392b;background:#2a0a0a;padding:10px;border-radius:6px;margin:8px 0">${msg}</pre>
+    <button onclick="refreshData()" style="background:#e74c3c;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:.9rem">&#8635; Retry</button>`;
+  }
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
