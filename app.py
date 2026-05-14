@@ -235,12 +235,6 @@ def api_get_insights():
         return jsonify({'error': 'Data not loaded'}), 503
     return jsonify(get_insights(data_dict))
 
-@app.route('/api/refresh')
-def api_refresh():
-    load_data()
-    if _cache.get('error'):
-        return jsonify({'status': 'error', 'message': _cache['error']}), 503
-    return jsonify({'status': 'ok', 'refreshed': _cache.get('refreshed')})
 
 if __name__ == '__main__':
     print("Integrated Operations Dashboard -> http://localhost:5005")
