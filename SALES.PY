@@ -16,6 +16,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 import json
+import os
 from collections import defaultdict
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -86,7 +87,18 @@ def get_region_for_location(location: str) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 def get_worksheet():
     """Authenticate and return the target gspread Worksheet object."""
-    creds     = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
+    # Check for credentials in environment variable (for production/Render)
+    env_creds = os.environ.get('GOOGLE_CREDENTIALS')
+    if env_creds:
+        try:
+            creds_info = json.loads(env_creds)
+            creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+        except Exception as e:
+            print(f"Error parsing GOOGLE_CREDENTIALS: {e}")
+            creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
+    else:
+        creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
+        
     client    = gspread.authorize(creds)
     sheet     = client.open_by_key(SHEET_ID)
     ws        = sheet.worksheet(WORKSHEET_NAME)

@@ -2,6 +2,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 import numpy as np
+import os
+import json
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -15,7 +17,16 @@ SCOPES = [
 ]
 
 def get_client():
-    creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
+    env_creds = os.environ.get('GOOGLE_CREDENTIALS')
+    if env_creds:
+        try:
+            creds_info = json.loads(env_creds)
+            creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+        except Exception as e:
+            print(f"Error parsing GOOGLE_CREDENTIALS: {e}")
+            creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
+    else:
+        creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
     return gspread.authorize(creds)
 
 def fetch_sheet_as_df(client, sheet_name, worksheet_name):

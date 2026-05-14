@@ -3,7 +3,7 @@ app.py — Annual Bags Sold 2026  |  Flask API  |  Port 5003
 """
 
 from flask import Flask, jsonify, render_template, request
-from SALES import ( # type: ignore
+from sales import ( # type: ignore
     get_worksheet, fetch_raw, parse_headers,
     build_dataframe,
     report_monthly_by_location, report_monthly_by_region,
