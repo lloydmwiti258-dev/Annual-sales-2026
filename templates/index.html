@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Denri Africa | Integrated Operations Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0f172a;
+  --bg-alt: #1e293b;
+  --accent: #38bdf8;
+  --accent-secondary: #818cf8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --radius: 16px;
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit', sans-serif; }
+body { background: var(--bg); color: var(--text); line-height: 1.5; overflow-x: hidden; }
+
+/* Background Decoration */
+.bg-glow {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.05) 0%, transparent 50%);
+    pointer-events: none; z-index: -1;
+}
+
+header {
+    padding: 20px 40px;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+    display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0; z-index: 1000;
+}
+
+.logo-section h1 { font-size: 1.5rem; font-weight: 800; background: linear-gradient(to right, var(--accent), var(--accent-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.logo-section p { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+.filters { display: flex; gap: 12px; align-items: center; }
+.filter-item select {
+    background: var(--bg-alt); color: var(--text); border: 1px solid var(--glass-border);
+    padding: 8px 16px; border-radius: 10px; font-size: 0.85rem; outline: none; cursor: pointer; transition: 0.2s;
+}
+.filter-item select:hover { border-color: var(--accent); }
+
+.btn-refresh {
+    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+    color: var(--bg); border: none; padding: 10px 20px; border-radius: 10px;
+    font-weight: 700; cursor: pointer; transition: 0.3s; font-size: 0.85rem;
+}
+.btn-refresh:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(56, 189, 248, 0.4); }
+
+main { padding: 30px 40px; max-width: 1800px; margin: 0 auto; }
+
+/* KPI Grid */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
+.kpi-card {
+    background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius);
+    padding: 24px; position: relative; overflow: hidden; transition: 0.3s;
+}
+.kpi-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.05); }
+.kpi-card::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: var(--card-color, var(--accent)); }
+.kpi-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
+.kpi-value { font-size: 2rem; font-weight: 800; margin-bottom: 4px; }
+.kpi-trend { font-size: 0.75rem; display: flex; align-items: center; gap: 4px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 10px; margin-bottom: 30px; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px; }
+.tab-btn {
+    padding: 10px 20px; background: transparent; border: none; color: var(--text-muted);
+    font-weight: 600; cursor: pointer; transition: 0.3s; position: relative;
+}
+.tab-btn.active { color: var(--accent); }
+.tab-btn.active::after { content: ''; position: absolute; bottom: -11px; left: 0; width: 100%; height: 2px; background: var(--accent); }
+
+/* Content Sections */
+.section { display: none; animation: fadeIn 0.5s ease-out; }
+.section.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+
+.card {
+    background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius);
+    padding: 24px; position: relative;
+}
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.card-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+.chart-container { height: 350px; width: 100%; }
+
+/* Table Styles */
+.table-container { overflow-x: auto; margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th { text-align: left; padding: 12px 16px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--glass-border); background: rgba(255,255,255,0.02); }
+td { padding: 12px 16px; border-bottom: 1px solid var(--glass-border); }
+tr:hover { background: rgba(255,255,255,0.02); }
+
+.search-box { position: relative; }
+.search-box input {
+    background: var(--bg-alt); border: 1px solid var(--glass-border); color: var(--text);
+    padding: 6px 12px; border-radius: 8px; width: 250px; font-size: 0.85rem; outline: none;
+}
+
+.btn-export {
+    background: rgba(56, 189, 248, 0.1); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.2);
+    padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.2s;
+}
+.btn-export:hover { background: var(--accent); color: var(--bg); }
+
+/* Insights & Action Plan */
+.insight-card {
+    display: flex; gap: 16px; padding: 16px; border-radius: 12px; margin-bottom: 12px;
+    background: rgba(255,255,255,0.03); border-left: 4px solid var(--accent);
+}
+.insight-card.warning { border-left-color: var(--warning); background: rgba(245, 158, 11, 0.05); }
+.insight-card.danger { border-left-color: var(--danger); background: rgba(239, 68, 68, 0.05); }
+.insight-icon { font-size: 1.5rem; }
+.insight-content h4 { margin-bottom: 4px; font-size: 0.95rem; }
+.insight-content p { font-size: 0.85rem; color: var(--text-muted); }
+
+.action-plan {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(129, 140, 248, 0.1));
+    border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 30px; margin-top: 20px;
+}
+.action-plan h3 { margin-bottom: 20px; color: var(--accent); }
+.action-list { list-style: none; }
+.action-item { margin-bottom: 15px; display: flex; gap: 12px; }
+.action-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; margin-top: 8px; flex-shrink: 0; }
+
+/* Loader */
+#loader {
+    position: fixed; inset: 0; background: var(--bg); z-index: 2000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.spinner { width: 50px; height: 50px; border: 3px solid rgba(56, 189, 248, 0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <p style="margin-top: 20px; font-weight: 600; color: var(--accent);">Synchronizing Data...</p>
+</div>
+
+<header>
+    <div class="logo-section">
+        <h1>DENRI AFRICA</h1>
+        <p>Operational Dashboard v2.0</p>
+    </div>
+    <div class="filters">
+        <div class="filter-item">
+            <select id="catFilter" onchange="loadDashboard()">
+                <option value="All">All Categories</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <select id="btFilter" onchange="loadDashboard()">
+                <option value="All">All Bag Types</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <select id="prodFilter" onchange="loadDashboard()">
+                <option value="All">All Products</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <select id="colorFilter" onchange="loadDashboard()">
+                <option value="All">All Colors</option>
+            </select>
+        </div>
+        <button class="btn-refresh" onclick="refreshData()">Sync Data</button>
+    </div>
+</header>
+
+<main>
+    <!-- KPI Row -->
+    <div class="kpi-grid">
+        <div class="kpi-card" style="--card-color: var(--accent)">
+            <div class="kpi-label">Total Sales</div>
+            <div class="kpi-value" id="kTotalSales">0</div>
+            <div class="kpi-trend" id="kTargetAchievement">0% Target Achieved</div>
+        </div>
+        <div class="kpi-card" style="--card-color: var(--success)">
+            <div class="kpi-label">Total Inventory</div>
+            <div class="kpi-value" id="kTotalStock">0</div>
+            <div class="kpi-trend" id="kWarehouseStock">0 in Warehouse</div>
+        </div>
+        <div class="kpi-card" style="--card-color: var(--accent-secondary)">
+            <div class="kpi-label">Production WIP</div>
+            <div class="kpi-value" id="kTotalProd">0</div>
+            <div class="kpi-trend">Active Stitching & Cutting</div>
+        </div>
+        <div class="kpi-card" style="--card-color: var(--warning)">
+            <div class="kpi-label">Total Dispatch</div>
+            <div class="kpi-value" id="kTotalDispatch">0</div>
+            <div class="kpi-trend">Units moved to shops</div>
+        </div>
+        <div class="kpi-card" style="--card-color: var(--danger)">
+            <div class="kpi-label">Total Deficit</div>
+            <div class="kpi-value" id="kTotalDeficit">0</div>
+            <div class="kpi-trend">Gap from target</div>
+        </div>
+    </div>
+
+    <!-- Main Navigation -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('master', this)">Master Overview</button>
+        <button class="tab-btn" onclick="switchTab('correlations', this)">Operational Correlations</button>
+        <button class="tab-btn" onclick="switchTab('insights', this)">Insights & Actions</button>
+    </div>
+
+    <!-- Master Overview Section -->
+    <div id="section-master" class="section active">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Operational Flow Analysis</div>
+                </div>
+                <div class="chart-container"><canvas id="chartFlow"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Marketing vs. Sales Performance</div>
+                </div>
+                <div class="chart-container"><canvas id="chartMktSales"></canvas></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Comprehensive Product Registry</div>
+                <div style="display:flex; gap:16px;">
+                    <div class="search-box">
+                        <input type="text" placeholder="Search Master Registry..." onkeyup="filterTable('tblMaster', this.value)">
+                    </div>
+                    <button class="btn-export" onclick="exportExcel('tblMaster', 'Denri_Master_Registry')">Export Master</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="tblMaster">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Color</th>
+                            <th>Product Name</th>
+                            <th>Bag Type</th>
+                            <th>Sales</th>
+                            <th>Shop Stock</th>
+                            <th>Warehouse</th>
+                            <th>Dispatch</th>
+                            <th>Production</th>
+                            <th>Marketing</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyMaster"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operational Correlations Section -->
+    <div id="section-correlations" class="section">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Inventory Health (Sales vs. Stocks)</div>
+                </div>
+                <div class="chart-container"><canvas id="chartCorr1"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Supply Chain Flow (Sales vs. Dispatch)</div>
+                </div>
+                <div class="chart-container"><canvas id="chartCorr2"></canvas></div>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Demand Conversion (Marketing vs. Sales)</div>
+                </div>
+                <div class="chart-container"><canvas id="chartCorr3"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Target Velocity (Actual vs. Deficit)</div>
+                </div>
+                <div class="chart-container"><canvas id="chartCorr4"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Insights & Actions Section -->
+    <div id="section-insights" class="section">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header"><div class="card-title">Intelligent Operational Alerts</div></div>
+                <div id="insightsList">
+                    <!-- Insights will be injected here -->
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Operational Recommendations</div></div>
+                <div class="insight-card">
+                    <div class="insight-icon">🚀</div>
+                    <div class="insight-content">
+                        <h4>Replenishment Priority</h4>
+                        <p>Focus production on high-sales products with warehouse stock below 50 units.</p>
+                    </div>
+                </div>
+                <div class="insight-card warning">
+                    <div class="insight-icon">⚖️</div>
+                    <div class="insight-content">
+                        <h4>Stock Redistribution</h4>
+                        <p>Identified mismatch between regional shop stocks and current sales velocity.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-plan">
+            <h3>Denri Africa - Strategic Action Plan</h3>
+            <div class="grid-2">
+                <div>
+                    <ul class="action-list">
+                        <li class="action-item">
+                            <div class="action-dot"></div>
+                            <div>
+                                <strong>Aggressive Marketing for Slow Movers:</strong>
+                                <p>Re-allocate marketing budget from top sellers to slow-moving products with high stock levels.</p>
+                            </div>
+                        </li>
+                        <li class="action-item">
+                            <div class="action-dot"></div>
+                            <div>
+                                <strong>Production Synchronization:</strong>
+                                <p>Slow down cutting for overstocked categories and prioritize stitching for low-deficit high-demand bag types.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <ul class="action-list">
+                        <li class="action-item">
+                            <div class="action-dot"></div>
+                            <div>
+                                <strong>Warehouse Optimization:</strong>
+                                <p>Initiate 'Warehouse Clearance' for units in "Effective Warehouse Stock" that haven't been dispatched in 4+ weeks.</p>
+                            </div>
+                        </li>
+                        <li class="action-item">
+                            <div class="action-dot"></div>
+                            <div>
+                                <strong>Dispatch Logistics:</strong>
+                                <p>Increase dispatch frequency for outlets showing high sales-to-stock ratios to prevent stockouts.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+// State Management
+let masterData = [];
+let correlations = [];
+let charts = {};
+
+const fmt = n => Number(n).toLocaleString();
+
+// Tab Switching
+function switchTab(tab, btn) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`section-${tab}`).classList.add('active');
+    btn.classList.add('active');
+}
+
+// Data Loading
+async function loadDashboard() {
+    const filters = {
+        category: document.getElementById('catFilter').value,
+        bagtype: document.getElementById('btFilter').value,
+        product: document.getElementById('prodFilter').value,
+        color: document.getElementById('colorFilter').value
+    };
+    
+    const params = new URLSearchParams(filters);
+    const res = await fetch(`/api/integrated-dashboard?${params}`);
+    const data = await res.json();
+    
+    if(data.error) {
+        alert(data.error);
+        return;
+    }
+    
+    masterData = data.master_data;
+    correlations = data.correlations;
+    updateKPIs(data.summary);
+    updateFilters(data.filters);
+    renderMasterTable();
+    renderCharts();
+    loadInsights();
+    
+    document.getElementById('loader').style.display = 'none';
+}
+
+function updateKPIs(s) {
+    document.getElementById('kTotalSales').textContent = fmt(s.total_sales);
+    document.getElementById('kTotalStock').textContent = fmt(s.total_stock);
+    document.getElementById('kTotalProd').textContent = fmt(s.total_production);
+    document.getElementById('kTotalDispatch').textContent = fmt(s.total_dispatch);
+    document.getElementById('kTotalDeficit').textContent = fmt(s.total_deficit);
+    
+    document.getElementById('kTargetAchievement').textContent = `${s.target_achievement}% Target Achieved`;
+    document.getElementById('kWarehouseStock').textContent = `${fmt(s.warehouse_availability)} in Warehouse`;
+}
+
+function updateFilters(f) {
+    const populate = (id, items) => {
+        const el = document.getElementById(id);
+        if(el.options.length > 1) return; // Only populate once
+        items.forEach(i => {
+            const opt = document.createElement('option');
+            opt.value = i; opt.textContent = i;
+            el.appendChild(opt);
+        });
+    };
+    populate('catFilter', f.categories);
+    populate('btFilter', f.bagtypes);
+    populate('prodFilter', f.products);
+    populate('colorFilter', f.colors);
+}
+
+function renderMasterTable() {
+    const tbody = document.getElementById('tbodyMaster');
+    tbody.innerHTML = masterData.map(r => `
+        <tr>
+            <td>${r['Category']}</td>
+            <td>${r['Color']}</td>
+            <td style="font-weight:600">${r['Product Name']}</td>
+            <td>${r['Bag Type']}</td>
+            <td>${fmt(r['Total Sales'])}</td>
+            <td>${fmt(r['Total Stock'])}</td>
+            <td>${fmt(r['Effective Warehouse Stock'])}</td>
+            <td>${fmt(r['Total Dispatch'])}</td>
+            <td>${fmt(r['Bags stitched'])}</td>
+            <td>${fmt(r['Total Marketing'])}</td>
+        </tr>
+    `).join('');
+}
+
+function renderCharts() {
+    // Shared Chart Options
+    const commonOpts = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Outfit' } } } },
+        scales: {
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+        }
+    };
+
+    // 1. Flow Analysis (Top 8 Categories)
+    const topCats = correlations.sort((a,b) => b['Total Sales'] - a['Total Sales']).slice(0, 8);
+    updateChart('chartFlow', 'bar', {
+        labels: topCats.map(c => c['Category']),
+        datasets: [
+            { label: 'Sales', data: topCats.map(c => c['Total Sales']), backgroundColor: '#38bdf8' },
+            { label: 'Production', data: topCats.map(c => c['Bags stitched']), backgroundColor: '#818cf8' },
+            { label: 'Stock', data: topCats.map(c => c['Total Stock']), backgroundColor: '#10b981' }
+        ]
+    }, commonOpts);
+
+    // 2. Marketing vs Sales
+    updateChart('chartMktSales', 'line', {
+        labels: topCats.map(c => c['Category']),
+        datasets: [
+            { label: 'Marketing Activity', data: topCats.map(c => c['Total Marketing']), borderColor: '#f59e0b', tension: 0.4 },
+            { label: 'Actual Sales', data: topCats.map(c => c['Total Sales']), borderColor: '#38bdf8', tension: 0.4, fill: true, backgroundColor: 'rgba(56, 189, 248, 0.1)' }
+        ]
+    }, commonOpts);
+
+    // 3. Correlation 1: Inventory Health
+    updateChart('chartCorr1', 'scatter', {
+        datasets: [{
+            label: 'Sales vs Stock Velocity',
+            data: correlations.map(c => ({ x: c['Total Sales'], y: c['Total Stock'] })),
+            backgroundColor: 'rgba(56, 189, 248, 0.6)'
+        }]
+    }, { ...commonOpts, scales: { x: { title: { display: true, text: 'Total Sales', color: '#94a3b8' } }, y: { title: { display: true, text: 'Total Stock', color: '#94a3b8' } } } });
+
+    // 4. Correlation 2: Supply Flow
+    updateChart('chartCorr2', 'bar', {
+        labels: topCats.map(c => c['Category']),
+        datasets: [
+            { label: 'Dispatch', data: topCats.map(c => c['Total Dispatch']), backgroundColor: '#f59e0b' },
+            { label: 'Sales', data: topCats.map(c => c['Total Sales']), backgroundColor: '#38bdf8' }
+        ]
+    }, commonOpts);
+
+    // 5. Correlation 3: Demand Conversion
+    updateChart('chartCorr3', 'bubble', {
+        datasets: [{
+            label: 'Marketing/Sales/Stock Mix',
+            data: correlations.map(c => ({ x: c['Total Marketing'], y: c['Total Sales'], r: Math.sqrt(c['Total Stock']) })),
+            backgroundColor: 'rgba(129, 140, 248, 0.6)'
+        }]
+    }, commonOpts);
+
+    // 6. Correlation 4: Target Performance
+    updateChart('chartCorr4', 'bar', {
+        labels: topCats.map(c => c['Category']),
+        datasets: [
+            { label: 'Target', data: topCats.map(c => c['Monthly sales target']), backgroundColor: 'rgba(255,255,255,0.1)' },
+            { label: 'Actual', data: topCats.map(c => c['Actual sales']), backgroundColor: '#10b981' },
+            { label: 'Deficit', data: topCats.map(c => c['Deficit']), backgroundColor: '#ef4444' }
+        ]
+    }, { ...commonOpts, scales: { ...commonOpts.scales, x: { stacked: true }, y: { stacked: false } } });
+}
+
+function updateChart(id, type, data, options) {
+    if(charts[id]) charts[id].destroy();
+    charts[id] = new Chart(document.getElementById(id), { type, data, options });
+}
+
+async function loadInsights() {
+    const res = await fetch('/api/insights');
+    const insights = await res.json();
+    const container = document.getElementById('insightsList');
+    container.innerHTML = insights.map(i => `
+        <div class="insight-card ${i.type}">
+            <div class="insight-icon">${i.type === 'warning' ? '⚠️' : i.type === 'danger' ? '🚨' : 'ℹ️'}</div>
+            <div class="insight-content">
+                <h4>${i.title}</h4>
+                <p>${i.message}</p>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function refreshData() {
+    document.getElementById('loader').style.display = 'flex';
+    await fetch('/api/refresh');
+    loadDashboard();
+}
+
+function filterTable(tableId, query) {
+    const q = query.toLowerCase();
+    const rows = document.getElementById(tableId).getElementsByTagName('tr');
+    for (let i = 1; i < rows.length; i++) {
+        rows[i].style.display = rows[i].innerText.toLowerCase().includes(q) ? '' : 'none';
+    }
+}
+
+function exportExcel(tableId, filename) {
+    const table = document.getElementById(tableId);
+    const wb = XLSX.utils.table_to_book(table);
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+// Initial Load
+window.onload = loadDashboard;
+
+</script>
+</body>
+</html>
