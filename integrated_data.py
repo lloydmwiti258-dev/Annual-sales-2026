@@ -55,7 +55,7 @@ def process_data():
     client = get_client()
     
     # 1. Fetch all sheets
-    sheets = ['SALES', 'MARKETING', 'STOCKS', 'PRODUCTION', 'WAREHOUSE', 'DISPATCH', 'MONTHLY TARGET']
+    sheets = ['SALE', 'MARKETING', 'STOCKS', 'PRODUCTION', 'WAREHOUSE', 'DISPATCH', 'MONTHLY TARGET']
     dfs = {}
     for s in sheets:
         dfs[s] = fetch_sheet_as_df(client, SHEET_NAME, s)
@@ -64,7 +64,7 @@ def process_data():
 
     # 2. Process Sales
     # Structure: Category, Color, Product Name, Bag Type, [Shops...], Total Sales
-    sales_df = dfs['SALES']
+    sales_df = dfs['SALE']
     shop_cols = [c for c in sales_df.columns if c not in ['Category', 'Color', 'Product Name', 'Bag Type', 'Total Sales']]
     for col in shop_cols + ['Total Sales']:
         sales_df[col] = sales_df[col].apply(clean_numeric)
