@@ -22,7 +22,7 @@ from collections import defaultdict
 # ══════════════════════════════════════════════════════════════════════════════
 # ❶  CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
-JSON_FILE_PATH = r'C:\Users\Administrator\Downloads\retention-485013-974e48474123.json'
+JSON_FILE_PATH = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', 'credentials.json')
 SHEET_ID       = '1DYkR0P4W1XUd7m4SmNWjqPimE0fbDq3P4d2yvsL48Wo'
 SHEET_NAME     = 'Annual_2026'
 WORKSHEET_NAME = 'ANNUAL_BAGS_SOLD_2026'
@@ -71,13 +71,6 @@ SHOP_REGION_MAP = {
 
 SHOP_REGION_MAP_LOWER = {loc.strip().lower(): region for loc, region in SHOP_REGION_MAP.items()}
 
-FOCUS_PRODUCTS = [
-    'AMORA', 'ARM BAND', 'CATHY HANDBAG', 'CELINE SLING BAG', 'CESS', 'CHASE',
-    'CLAIRE HANDBAG', 'COSMO', 'IMANI', 'LEGACY', 'LOOP BP', 'MANDY HB', 'MEGA',
-    'MINI UMBRA', 'MONAH BP', 'MONTANA', 'NALA', 'PIONEER', 'PRIME',
-    'SIERRA HANDBAG', 'SKYE HB', 'SPARK', 'SPLASH BACKPACK', 'TAJI', 'VOYAGE',
-]
-
 def get_region_for_location(location: str) -> str:
     return SHOP_REGION_MAP_LOWER.get(location.strip().lower(), 'Unknown')
 
@@ -87,18 +80,25 @@ def get_region_for_location(location: str) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 def get_worksheet():
     """Authenticate and return the target gspread Worksheet object."""
-    # Check for credentials in environment variable (for production/Render)
-    env_creds = os.environ.get('GOOGLE_CREDENTIALS')
-    if env_creds:
+    # Try environment variable first (for Render/Production)
+    creds_json = os.environ.get('GOOGLE_CREDENTIALS')
+    
+    if creds_json:
         try:
-            creds_info = json.loads(env_creds)
-            creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+            info = json.loads(creds_json)
+            creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+            print("OK  Authenticated via GOOGLE_CREDENTIALS env var")
         except Exception as e:
             print(f"Error parsing GOOGLE_CREDENTIALS: {e}")
             creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
     else:
+        # Fallback to local file
+        if not os.path.exists(JSON_FILE_PATH):
+            print(f"[ERROR] Credentials file not found at {JSON_FILE_PATH}")
+            raise FileNotFoundError(f"Credentials not found. Set GOOGLE_CREDENTIALS or provide {JSON_FILE_PATH}")
         creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
-        
+        print(f"OK  Authenticated via {JSON_FILE_PATH}")
+
     client    = gspread.authorize(creds)
     sheet     = client.open_by_key(SHEET_ID)
     ws        = sheet.worksheet(WORKSHEET_NAME)
@@ -338,7 +338,7 @@ def report_location_color_monthly(df: pd.DataFrame, location: str) -> pd.DataFra
 # ══════════════════════════════════════════════════════════════════════════════
 # ❻  EXPORT — prints + saves to Excel with multiple sheets
 # ══════════════════════════════════════════════════════════════════════════════
-def export_reports(reports: dict, output_path: str = r'c:\python\Annual sales 2026\Annual_2026_Report.xlsx'):
+def export_reports(reports: dict, output_path: str = 'Annual_2026_Report.xlsx'):
     """Write all report DataFrames to a multi-sheet Excel file."""
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         for sheet_name, df_report in reports.items():
