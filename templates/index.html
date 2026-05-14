@@ -991,10 +991,13 @@ function showError(msg, type='connection'){
     The service account cannot access <strong>ANNUAL SALES 2026</strong>.<br><br>
     <strong>Fix:</strong> Open the sheet in Google Sheets &rarr; click <strong>Share</strong> &rarr; add:<br>
     <code style="background:#2a0a0a;padding:4px 10px;border-radius:5px;font-size:.85rem">retention@retention-485013.iam.gserviceaccount.com</code>
-    as <strong>Editor</strong>, then click <strong>Retry</strong> below.<br><br>
-    <details style="margin-top:8px"><summary style="cursor:pointer;color:#8b949e;font-size:.85rem">Error details</summary>
-    <pre style="white-space:pre-wrap;font-size:.8rem;color:#c0392b;margin-top:6px">${msg}</pre></details>
-    <br><button onclick="refreshData()" style="background:#e74c3c;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:.9rem">&#8635; Retry Connection</button>`;
+    as <strong>Editor</strong>.<br><br>
+    <details open style="margin-top:8px"><summary style="cursor:pointer;color:#aaa;font-size:.85rem">&#9660; Error details (share this to diagnose)</summary>
+    <pre style="white-space:pre-wrap;font-size:.82rem;color:#e74c3c;background:#2a0a0a;padding:10px;border-radius:6px;margin-top:6px">${msg}</pre></details>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+      <button onclick="refreshData()" style="background:#e74c3c;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:.9rem">&#8635; Retry Connection</button>
+      <a href="/api/test-connection" target="_blank" style="background:#222;color:#aaa;border:1px solid #555;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:.9rem;text-decoration:none">&#128269; Run Diagnostic</a>
+    </div>`;
   } else {
     b.innerHTML=`<strong style="font-size:1rem">Dashboard Error</strong><br>
     The sheet is connected but something went wrong loading the data.<br><br>

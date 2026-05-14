@@ -93,6 +93,49 @@ def api_refresh():
     return jsonify({'status': 'ok', 'refreshed': _cache.get('refreshed')})
 
 
+@app.route('/api/test-connection')
+def api_test_connection():
+    """Diagnostic endpoint — returns exactly what is failing."""
+    import os, json as _json
+    from sales import SHEET_ID, WORKSHEET_NAME, SCOPES, JSON_FILE_PATH
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    info = {}
+    info['sheet_id']        = SHEET_ID
+    info['worksheet_name']  = WORKSHEET_NAME
+    info['creds_env_set']   = bool(os.environ.get('GOOGLE_CREDENTIALS'))
+    info['creds_file_exists'] = os.path.exists(JSON_FILE_PATH)
+
+    try:
+        creds_json = os.environ.get('GOOGLE_CREDENTIALS')
+        if creds_json:
+            creds = Credentials.from_service_account_info(_json.loads(creds_json), scopes=SCOPES)
+            info['auth_source'] = 'GOOGLE_CREDENTIALS env var'
+        else:
+            creds = Credentials.from_service_account_file(JSON_FILE_PATH, scopes=SCOPES)
+            info['auth_source'] = f'file: {JSON_FILE_PATH}'
+        info['auth_ok'] = True
+    except Exception as e:
+        info['auth_ok'] = False
+        info['auth_error'] = str(e)
+        return jsonify(info), 500
+
+    try:
+        client = gspread.authorize(creds)
+        sheet  = client.open_by_key(SHEET_ID)
+        info['spreadsheet_ok']    = True
+        info['spreadsheet_title'] = sheet.title
+        info['worksheets']        = [ws.title for ws in sheet.worksheets()]
+    except Exception as e:
+        info['spreadsheet_ok'] = False
+        info['spreadsheet_error'] = str(e)
+        return jsonify(info), 500
+
+    info['target_worksheet_found'] = WORKSHEET_NAME in info['worksheets']
+    return jsonify(info), 200 if info['target_worksheet_found'] else 404
+
+
 @app.route('/api/status')
 def api_status():
     """Health check — returns connection error if sheet not yet shared."""
