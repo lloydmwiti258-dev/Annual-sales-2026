@@ -144,19 +144,19 @@ tr:hover td{background:rgba(255,255,255,0.03)}
   <div style="display:flex; gap:12px; align-items:center;">
     <div class="filter-group">
       <label for="monthFilter" style="font-size:0.8rem; color:#8b949e; margin-right:6px;">Timeline:</label>
-      <select id="monthFilter" onchange="refreshData()" style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:4px 8px; font-size:0.9rem; outline:none; cursor:pointer;">
+      <select id="monthFilter" onchange="applyAndRender()" style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:4px 8px; font-size:0.9rem; outline:none; cursor:pointer;">
         <option value="Overall">Overall Performance</option>
       </select>
     </div>
     <div class="filter-group">
       <label for="regionFilter" style="font-size:0.8rem; color:#8b949e; margin-right:6px;">Region:</label>
-      <select id="regionFilter" onchange="refreshData()" style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:4px 8px; font-size:0.9rem; outline:none; cursor:pointer;">
+      <select id="regionFilter" onchange="applyAndRender()" style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:4px 8px; font-size:0.9rem; outline:none; cursor:pointer;">
         <option value="All">All Regions</option>
       </select>
     </div>
     <div class="filter-group">
       <label for="shopFilter" style="font-size:0.8rem; color:#8b949e; margin-right:6px;">Shop:</label>
-      <select id="shopFilter" onchange="refreshData()" style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:4px 8px; font-size:0.9rem; outline:none; cursor:pointer;">
+      <select id="shopFilter" onchange="applyAndRender()" style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:4px 8px; font-size:0.9rem; outline:none; cursor:pointer;">
         <option value="All">All Shops</option>
       </select>
     </div>
@@ -475,10 +475,11 @@ tr:hover td{background:rgba(255,255,255,0.03)}
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let META={}, SUMMARY={}, LOC_DATA={}, REG_DATA={}, COLOR_DATA={}, CAT_DATA={}, BAG_DATA={}, COLOR_REG=[], PROD_DATA={}, FOCUS_DATA={};
-let currentMonth = 'Overall', currentRegion = 'All', currentShop = 'All';
-let activeFocusFilter = null;
+let RAW_ROWS=[], ALL_MONTHS=[], ALL_LOCATIONS=[];
+let currentMonth='Overall', currentRegion='All', currentShop='All';
 const CHARTS={};
 const PALETTE=['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b','#795548','#ff9800','#673ab7','#009688','#f44336','#2196f3'];
+const FOCUS_PREFIXES=['AMORA','ARM BAND','CATHY HANDBAG','CELINE SLING BAG','CESS','CHASE','CLAIRE HB','COSMO','IMANI','LEGACY','LOOP BP','MANDY HB','MEGA','MINI UMBRA','MONAH BP','MONTANA','NALA','PIONEER','PRIME','SIERRA HANDBAG','SKYE HB','SPARK','SPLASH BACKPACK','TAJI','VOYAGE'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const $=id=>document.getElementById(id);
@@ -547,76 +548,157 @@ function switchTab(name,btn){
 // ── API Fetch ──────────────────────────────────────────────────────────────
 async function api(url){const r=await fetch(url);return r.json();}
 
+// ── Client-side aggregation ────────────────────────────────────────────────
+function isFocus(name){ return FOCUS_PREFIXES.some(p=>(name||'').toUpperCase().startsWith(p)); }
+
+function applyFilters(rows){
+  return rows.filter(r=>{
+    if(currentMonth!=='Overall' && r.Month.toUpperCase()!==currentMonth.toUpperCase()) return false;
+    if(currentRegion!=='All' && r.Region!==currentRegion) return false;
+    if(currentShop!=='All' && r.Location!==currentShop) return false;
+    return true;
+  });
+}
+
+function getActiveMths(rows, allMonths){
+  const t={};
+  rows.forEach(r=>{ t[r.Month]=(t[r.Month]||0)+r.Qty; });
+  const a=allMonths.filter(m=>(t[m]||0)>0);
+  return a.length?a:allMonths;
+}
+
+function groupBy(rows, key, months, nameKey, withRegion=false){
+  const map={};
+  rows.forEach(r=>{
+    const k=r[key]; if(!k) return;
+    if(!map[k]){ map[k]={[nameKey]:k,total:0}; if(withRegion) map[k].region=r.Region||''; months.forEach(m=>map[k][m]=0); }
+    if(months.includes(r.Month)){ map[k][r.Month]=(map[k][r.Month]||0)+r.Qty; }
+    map[k].total+=r.Qty;
+  });
+  return Object.values(map).sort((a,b)=>b.total-a.total);
+}
+
+function topOf(rows, key){
+  const map={};
+  rows.forEach(r=>{ const k=r[key]; if(k) map[k]=(map[k]||0)+r.Qty; });
+  const e=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  return e.length?[e[0][0],e[0][1]]:[null,0];
+}
+
+function computeSummary(filtered, months, allLocations){
+  const data=filtered.filter(r=>r.Location!=='Total');
+  const mt={}; months.forEach(m=>mt[m]=0);
+  data.forEach(r=>{ if(months.includes(r.Month)) mt[r.Month]=(mt[r.Month]||0)+r.Qty; });
+  const total=Object.values(mt).reduce((s,v)=>s+v,0);
+  const [topLoc,topLocQ]=topOf(data,'Location');
+  const [topCol,topColQ]=topOf(data,'Color');
+  const [topCat,topCatQ]=topOf(data,'Category');
+  const [topReg,topRegQ]=topOf(data,'Region');
+  const [topBag,topBagQ]=topOf(data,'BagType');
+  const [topProd,topProdQ]=topOf(data,'ProductName');
+  const focusRows=data.filter(r=>isFocus(r.ProductName));
+  const focusTotal=focusRows.reduce((s,r)=>s+r.Qty,0);
+  const [focusTop,focusTopQ]=topOf(focusRows,'ProductName');
+  const [focusBag,focusBagQ]=topOf(focusRows,'BagType');
+  const monthly_stats=months.map(m=>{
+    const mRows=data.filter(r=>r.Month===m);
+    const locS={}; mRows.forEach(r=>{ locS[r.Location]=(locS[r.Location]||0)+r.Qty; });
+    const tot=Object.values(locS).reduce((s,v)=>s+v,0);
+    if(tot>0){
+      const [bs,bsq]=topOf(mRows,'Location');
+      const [bc]=topOf(mRows.filter(r=>r.Color),'Color');
+      const [bcat]=topOf(mRows.filter(r=>r.Category),'Category');
+      const [bbag]=topOf(mRows.filter(r=>r.BagType),'BagType');
+      const [bprod]=topOf(mRows.filter(r=>r.ProductName),'ProductName');
+      return {month:m,total:tot,best_shop:bs||'—',best_shop_qty:bsq,best_color:bc||'—',best_category:bcat||'—',best_bagtype:bbag||'—',best_product:bprod||'—'};
+    }
+    return {month:m,total:0,best_shop:'—',best_shop_qty:0,best_color:'—',best_category:'—',best_bagtype:'—',best_product:'—'};
+  });
+  return {
+    total_bags:total,monthly_totals:mt,monthly_stats,
+    top_location:topLoc,top_location_qty:topLocQ,
+    top_color:topCol,top_color_qty:topColQ,
+    top_category:topCat,top_category_qty:topCatQ,
+    top_region:topReg,top_region_qty:topRegQ,
+    top_bagtype:topBag,top_bagtype_qty:topBagQ,
+    top_product:topProd,top_product_qty:topProdQ,
+    new_products_total:focusTotal,new_products_top:focusTop||'—',new_products_top_qty:focusTopQ,
+    new_products_top_bag:focusBag||'—',new_products_top_bag_qty:focusBagQ,
+    num_locations:allLocations.length,num_months:months.length
+  };
+}
+
+function computeColorByRegion(rows){
+  const map={};
+  rows.forEach(r=>{ const reg=r.Region,col=r.Color; if(!reg||!col) return; if(!map[reg]) map[reg]={region:reg,colors:{}}; map[reg].colors[col]=(map[reg].colors[col]||0)+r.Qty; });
+  return Object.values(map).map(r=>({region:r.region,colors:Object.entries(r.colors).sort((a,b)=>b[1]-a[1]).map(([color,qty])=>({color,qty}))}));
+}
+
+function computeFocusData(filtered, months){
+  const fr=filtered.filter(r=>isFocus(r.ProductName));
+  const gp=(key,nk,wr=false)=>groupBy(fr,key,months,nk,wr);
+  return {months,by_location:gp('Location','location',true),by_region:gp('Region','region'),by_color:gp('Color','color'),by_category:gp('Category','category'),by_bagtype:gp('BagType','bagtype'),by_product:gp('ProductName','product')};
+}
+
+function applyAndRender(){
+  currentMonth=$('monthFilter').value;
+  currentRegion=$('regionFilter').value;
+  currentShop=$('shopFilter').value;
+  const filtered=applyFilters(RAW_ROWS);
+  const months=currentMonth!=='Overall'
+    ? ALL_MONTHS.filter(m=>m.toUpperCase()===currentMonth.toUpperCase())
+    : getActiveMths(filtered,ALL_MONTHS);
+  SUMMARY=computeSummary(filtered,months,ALL_LOCATIONS);
+  META.months=months;
+  LOC_DATA={months,data:groupBy(filtered,'Location',months,'location',true)};
+  REG_DATA={months,data:groupBy(filtered,'Region',months,'region').map(r=>({...r,color:META.region_colors?.[r.region]||'#888'}))};
+  COLOR_DATA={months,data:groupBy(filtered,'Color',months,'color')};
+  CAT_DATA={months,data:groupBy(filtered,'Category',months,'category')};
+  BAG_DATA={months,data:groupBy(filtered,'BagType',months,'bagtype')};
+  PROD_DATA={months,data:groupBy(filtered,'ProductName',months,'product').filter(r=>r.total>0)};
+  COLOR_REG=computeColorByRegion(RAW_ROWS);
+  FOCUS_DATA=computeFocusData(filtered,months);
+  renderAll();
+}
+
 async function loadAll(){
   $('loader').style.display='flex';
   try{
-    // Check connection first
-    const status=await fetch('/api/status');
-    if(!status.ok){
-      const s=await status.json();
-      showError(s.error||'SpreadsheetNotFound', 'connection'); return;
-    }
-    currentMonth = $('monthFilter').value;
-    currentRegion = $('regionFilter').value;
-    currentShop = $('shopFilter').value;
-    
-    const params = new URLSearchParams();
-    if(currentMonth !== 'Overall') params.append('month', currentMonth);
-    if(currentRegion !== 'All') params.append('region', currentRegion);
-    if(currentShop !== 'All') params.append('shop', currentShop);
-    const mParam = params.toString() ? '?' + params.toString() : '';
-
-    [META,SUMMARY,LOC_DATA,REG_DATA,COLOR_DATA,CAT_DATA,BAG_DATA,COLOR_REG,PROD_DATA,FOCUS_DATA]=
-      await Promise.all([
-        api('/api/meta'),api(`/api/summary${mParam}`),
-        api(`/api/monthly-by-location${mParam}`),api(`/api/monthly-by-region${mParam}`),
-        api(`/api/color-performance${mParam}`),api(`/api/category-performance${mParam}`),
-        api(`/api/bagtype-performance${mParam}`),api(`/api/color-by-region`),
-        api(`/api/product-performance${mParam}`),api(`/api/focus-analytics${mParam}`)
-      ]);
-    
-    // Populate filters if empty
-    const mFilter = $('monthFilter');
-    if(mFilter.options.length <= 1 && META.months) {
-      META.months.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m; opt.textContent = m;
-        mFilter.appendChild(opt);
-      });
-    }
-    const rFilter = $('regionFilter');
-    if(rFilter.options.length <= 1 && META.region_colors) {
-      Object.keys(META.region_colors).sort().forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r; opt.textContent = r;
-        rFilter.appendChild(opt);
-      });
-    }
-    const sFilter = $('shopFilter');
-    if(sFilter.options.length <= 1 && META.locations) {
-      META.locations.sort().forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s; opt.textContent = s;
-        sFilter.appendChild(opt);
-      });
-    }
-    // Check any data endpoint returned an error
-    const firstErr = [META,SUMMARY,LOC_DATA,REG_DATA,COLOR_DATA,CAT_DATA,BAG_DATA,COLOR_REG,PROD_DATA,FOCUS_DATA]
-      .find(d => d && d.error);
-    if(firstErr){ showError(firstErr.error, 'data'); return; }
-
-    // Remove any old error banner
-    const b=document.getElementById('errBanner');
-    if(b) b.remove();
-    renderAll();
-  }catch(e){showError(e.message, 'unknown');}
+    const statusResp=await fetch('/api/status');
+    if(!statusResp.ok){ const s=await statusResp.json(); showError(s.error||'SpreadsheetNotFound','connection'); return; }
+    const [metaData,rawData]=await Promise.all([api('/api/meta'),api('/api/raw-data')]);
+    if(metaData.error){ showError(metaData.error,'data'); return; }
+    if(rawData.error){ showError(rawData.error,'data'); return; }
+    META=metaData;
+    RAW_ROWS=rawData.rows||[];
+    ALL_MONTHS=rawData.months||[];
+    ALL_LOCATIONS=rawData.locations||[];
+    // Populate dropdowns once
+    const mf=$('monthFilter');
+    if(mf.options.length<=1) ALL_MONTHS.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mf.appendChild(o); });
+    const rf=$('regionFilter');
+    if(rf.options.length<=1 && META.region_colors) Object.keys(META.region_colors).sort().forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=r; rf.appendChild(o); });
+    const sf=$('shopFilter');
+    if(sf.options.length<=1) ALL_LOCATIONS.slice().sort().forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sf.appendChild(o); });
+    const b=document.getElementById('errBanner'); if(b) b.remove();
+    applyAndRender();
+  }catch(e){showError(e.message,'unknown');}
   $('loader').style.display='none';
 }
 
 async function refreshData(){
   $('loader').style.display='flex';
-  await api('/api/refresh');
-  await loadAll();
+  try{
+    await api('/api/refresh');
+    const rawData=await api('/api/raw-data');
+    if(rawData.error){ showError(rawData.error,'data'); return; }
+    RAW_ROWS=rawData.rows||[];
+    ALL_MONTHS=rawData.months||[];
+    ALL_LOCATIONS=rawData.locations||[];
+    const b=document.getElementById('errBanner'); if(b) b.remove();
+    applyAndRender();
+  }catch(e){showError(e.message,'unknown');}
+  $('loader').style.display='none';
 }
 
 // ── KPIs ───────────────────────────────────────────────────────────────────

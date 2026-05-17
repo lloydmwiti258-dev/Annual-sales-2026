@@ -447,6 +447,20 @@ def api_meta():
     })
 
 
+@app.route('/api/raw-data')
+def api_raw_data():
+    """Full tidy DataFrame — used by the browser for client-side filtering."""
+    df, headers = get_df()
+    if df is None:
+        return jsonify({'error': _cache.get('error', 'Sheet not loaded')}), 503
+    return jsonify({
+        'rows':      df.to_dict(orient='records'),
+        'months':    headers['months'],
+        'locations': headers['locations'],
+        'refreshed': _cache.get('refreshed', '—'),
+    })
+
+
 @app.route('/api/summary')
 def api_summary():
     raw_df, headers = get_df()
